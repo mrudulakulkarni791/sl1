@@ -1,0 +1,309 @@
+1. Design and develop SQL DDL and DML statements to manage the bank database as manage customers, their bank accounts, and transactions (balances, deposits and withdrawals) in a bank. Also execute queries for following:
+ 1. Find total deposits per account type. 
+2. List all transactions in descending order of date. 
+3. Find customers whose balance is above the average balance. 
+4. List all customers living in “Mumbai”. 
+5. Delete a transaction older than 30 days.
+
+
+
+-- Create Database
+CREATE DATABASE IF NOT EXISTS bank_db;
+USE bank_db;
+
+-- 1. Create Tables (DDL)
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    city VARCHAR(50),
+    phone VARCHAR(15)
+);
+
+CREATE TABLE Accounts (
+    account_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    account_type VARCHAR(50),
+    balance DECIMAL(12,2) DEFAULT 0.00,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+);
+
+CREATE TABLE Transactions (
+    transaction_id INT AUTO_INCREMENT PRIMARY KEY,
+    account_id INT,
+    transaction_date DATE,
+    transaction_type ENUM('Deposit', 'Withdrawal'),
+    amount DECIMAL(12,2),
+    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+);
+
+-- 2. Insert Sample Data (DML)
+INSERT INTO Customers (name, city, phone) VALUES
+('Rahul Sharma', 'Mumbai', '9876543210'),
+('Priya Mehta', 'Pune', '9123456780'),
+('Amit Singh', 'Mumbai', '9001122334'),
+('Sneha Patil', 'Delhi', '9898989898');
+
+INSERT INTO Accounts (customer_id, account_type, balance) VALUES
+(1, 'Savings', 45000.00),
+(2, 'Current', 70000.00),
+(3, 'Savings', 30000.00),
+(4, 'Savings', 150000.00);
+
+INSERT INTO Transactions (account_id, transaction_date, transaction_type, amount) VALUES
+(1, '2025-10-15', 'Deposit', 5000.00),
+(1, '2025-10-25', 'Withdrawal', 2000.00),
+(2, '2025-09-10', 'Deposit', 10000.00),
+(3, '2025-10-20', 'Deposit', 4000.00),
+(4, '2025-08-15', 'Withdrawal', 10000.00),
+(4, '2025-10-01', 'Deposit', 25000.00);
+
+-- 3. Queries
+
+-- 1️⃣ Find total deposits per account type
+SELECT 
+    a.account_type,
+    SUM(t.amount) AS total_deposits
+FROM 
+    Accounts a
+JOIN 
+    Transactions t ON a.account_id = t.account_id
+WHERE 
+    t.transaction_type = 'Deposit'
+GROUP BY 
+    a.account_type;
+
+-- 2️⃣ List all transactions in descending order of date
+SELECT 
+    t.transaction_id, 
+    c.name AS customer_name, 
+    a.account_type, 
+    t.transaction_type, 
+    t.amount, 
+    t.transaction_date
+FROM 
+    Transactions t
+JOIN 
+    Accounts a ON t.account_id = a.account_id
+JOIN 
+    Customers c ON a.customer_id = c.customer_id
+ORDER BY 
+    t.transaction_date DESC;
+
+-- 3️⃣ Find customers whose balance is above the average balance
+SELECT 
+    c.name, 
+    a.account_type, 
+    a.balance
+FROM 
+    Accounts a
+JOIN 
+    Customers c ON a.customer_id = c.customer_id
+WHERE 
+    a.balance > (SELECT AVG(balance) FROM Accounts);
+
+-- 4️⃣ List all customers living in “Mumbai”
+SELECT 
+    * 
+FROM 
+    Customers 
+WHERE 
+    city = 'Mumbai';
+
+-- 5️⃣ Delete a transaction older than 30 days
+DELETE FROM 
+    Transactions
+WHERE 
+    transaction_date < (CURDATE() - INTERVAL 30 DAY);
+
+To verify data:
+SELECT * FROM Customers;
+SELECT * FROM Accounts;
+SELECT * FROM Transactions;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Nice — I’ll walk through that SQL script line-by-line and explain exactly what each statement does, why it’s there, and any subtle behaviors or caveats to watch for. I’ll keep it direct and practical.
+________________________________________
+-- Create Database
+CREATE DATABASE IF NOT EXISTS bank_db;
+Explanation: Creates a new database named bank_db if it does not already exist. IF NOT EXISTS prevents an error if the database already exists.
+USE bank_db;
+Explanation: Tells MySQL to make bank_db the current database for subsequent statements. All tables created or queries run after this operate inside bank_db.
+________________________________________
+-- 1. Create Tables (DDL)
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    city VARCHAR(50),
+    phone VARCHAR(15)
+);
+Line-by-line:
+•	CREATE TABLE Customers (: start definition of a table named Customers.
+•	customer_id INT AUTO_INCREMENT PRIMARY KEY,: defines customer_id as an integer column that automatically increments for each new row and is the table’s primary key (unique identifier). Primary key implies a unique index and not-null.
+•	name VARCHAR(100) NOT NULL,: name is a variable-length string up to 100 characters. NOT NULL requires a value for this field.
+•	city VARCHAR(50),: city stores up to 50 characters and is nullable by default (can be NULL).
+•	phone VARCHAR(15): phone stores up to 15 characters. Using VARCHAR leaves room for formatting like +91-....
+•	); ends the table definition.
+Notes: No explicit engine specified. Typical MySQL defaults to InnoDB which enforces foreign keys. There is no uniqueness constraint on phone or name.
+________________________________________
+CREATE TABLE Accounts (
+    account_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    account_type VARCHAR(50),
+    balance DECIMAL(12,2) DEFAULT 0.00,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+);
+Line-by-line:
+•	CREATE TABLE Accounts (: starts the Accounts table.
+•	account_id INT AUTO_INCREMENT PRIMARY KEY,: unique id for each account, auto incremented.
+•	customer_id INT,: integer that links this account to a customer. It will be the foreign key to Customers.
+•	account_type VARCHAR(50),: text describing the type of account, e.g. 'Savings' or 'Current'.
+•	balance DECIMAL(12,2) DEFAULT 0.00,: monetary amount with precision. DECIMAL(12,2) means up to 12 digits total with 2 after the decimal point. DEFAULT 0.00 sets the initial balance to zero if no value is provided.
+•	FOREIGN KEY (customer_id) REFERENCES Customers(customer_id): enforces referential integrity: customer_id must match an existing customer_id in the Customers table (or be NULL if column is nullable).
+Notes / Caveats:
+•	Because customer_id was not declared NOT NULL, an account could exist without a customer (NULL foreign key). If you want to require every account to have a customer, add customer_id INT NOT NULL.
+•	No ON DELETE / ON UPDATE clauses specified. By default, attempts to delete a customer referenced by accounts will fail.
+________________________________________
+CREATE TABLE Transactions (
+    transaction_id INT AUTO_INCREMENT PRIMARY KEY,
+    account_id INT,
+    transaction_date DATE,
+    transaction_type ENUM('Deposit', 'Withdrawal'),
+    amount DECIMAL(12,2),
+    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+);
+Line-by-line:
+•	CREATE TABLE Transactions (: start Transactions table.
+•	transaction_id INT AUTO_INCREMENT PRIMARY KEY,: unique id for each transaction.
+•	account_id INT,: links the transaction to an account.
+•	transaction_date DATE,: stores the date of the transaction (YYYY-MM-DD). This column is DATE type, not DATETIME, so it only stores date (no time).
+•	transaction_type ENUM('Deposit', 'Withdrawal'),: restricts values to either 'Deposit' or 'Withdrawal'. ENUM enforces allowed values at the column level.
+•	amount DECIMAL(12,2),: monetary amount for the transaction.
+•	FOREIGN KEY (account_id) REFERENCES Accounts(account_id): ensures every transaction’s account_id refers to an existing account.
+Notes: Again account_id is nullable here by default; consider NOT NULL if every transaction must belong to an account. ENUM is convenient but can be less flexible than a separate lookup table of transaction types.
+________________________________________
+-- 2. Insert Sample Data (DML)
+INSERT INTO Customers (name, city, phone) VALUES
+('Rahul Sharma', 'Mumbai', '9876543210'),
+('Priya Mehta', 'Pune', '9123456780'),
+('Amit Singh', 'Mumbai', '9001122334'),
+('Sneha Patil', 'Delhi', '9898989898');
+Explanation: Adds four rows to Customers. You list the target columns (name, city, phone) and then provide row values. customer_id is not provided because it will be auto generated.
+________________________________________
+INSERT INTO Accounts (customer_id, account_type, balance) VALUES
+(1, 'Savings', 45000.00),
+(2, 'Current', 70000.00),
+(3, 'Savings', 30000.00),
+(4, 'Savings', 150000.00);
+Explanation: Inserts four accounts, one for each customer (assuming customer_ids 1–4 from previous inserts). Each row sets customer_id, account_type, and the starting balance.
+Note: If the Customers inserts failed or produced different customer_id values, these references would be wrong. Typically you rely on sequential auto-increment values or query LAST_INSERT_ID() if inserting one-by-one.
+________________________________________
+INSERT INTO Transactions (account_id, transaction_date, transaction_type, amount) VALUES
+(1, '2025-10-15', 'Deposit', 5000.00),
+(1, '2025-10-25', 'Withdrawal', 2000.00),
+(2, '2025-09-10', 'Deposit', 10000.00),
+(3, '2025-10-20', 'Deposit', 4000.00),
+(4, '2025-08-15', 'Withdrawal', 10000.00),
+(4, '2025-10-01', 'Deposit', 25000.00);
+Explanation: Inserts six transactions tied to specific account_ids. Dates are given as literal strings in YYYY-MM-DD format which match the DATE column. The transaction_type values must match the ENUM options.
+Caveat: This script does not automatically update the Accounts.balance column when inserting transactions. The balances remain as initially inserted unless you add triggers or explicitly update Accounts.
+________________________________________
+-- 3. Queries
+
+-- 1️⃣ Find total deposits per account type
+SELECT 
+    a.account_type,
+    SUM(t.amount) AS total_deposits
+FROM 
+    Accounts a
+JOIN 
+    Transactions t ON a.account_id = t.account_id
+WHERE 
+    t.transaction_type = 'Deposit'
+GROUP BY 
+    a.account_type;
+Line-by-line explanation:
+•	SELECT a.account_type, SUM(t.amount) AS total_deposits: select the account type and the sum of amounts for matching transactions, returning that sum under the column name total_deposits.
+•	FROM Accounts a JOIN Transactions t ON a.account_id = t.account_id: inner join between Accounts and Transactions where account_id matches. This excludes accounts without transactions.
+•	WHERE t.transaction_type = 'Deposit': filter to only deposit transactions.
+•	GROUP BY a.account_type: aggregate rows by account_type so SUM is computed per type.
+Result: One row per account type showing total deposit amounts across all accounts of that type.
+Edge cases: If you want account types with zero deposits to still appear, use a LEFT JOIN and COALESCE(SUM(t.amount),0).
+________________________________________
+-- 2️⃣ List all transactions in descending order of date
+SELECT 
+    t.transaction_id, 
+    c.name AS customer_name, 
+    a.account_type, 
+    t.transaction_type, 
+    t.amount, 
+    t.transaction_date
+FROM 
+    Transactions t
+JOIN 
+    Accounts a ON t.account_id = a.account_id
+JOIN 
+    Customers c ON a.customer_id = c.customer_id
+ORDER BY 
+    t.transaction_date DESC;
+Line-by-line:
+•	SELECT t.transaction_id, c.name AS customer_name, a.account_type, t.transaction_type, t.amount, t.transaction_date: choose transaction id, customer name (aliased), account type, type of transaction, amount, and the date.
+•	FROM Transactions t JOIN Accounts a ON t.account_id = a.account_id JOIN Customers c ON a.customer_id = c.customer_id: join transactions to accounts, then accounts to customers; this lets you show the customer name for each transaction.
+•	ORDER BY t.transaction_date DESC: sort results from newest date to oldest. Because transaction_date is DATE type, ties will not be ordered by time; if you need full timestamp ordering, use DATETIME and include it here.
+Note: If any Transactions.account_id points to a missing account, an INNER JOIN will drop that row. Use LEFT JOIN if you want to preserve unmatched transactions.
+________________________________________
+-- 3️⃣ Find customers whose balance is above the average balance
+SELECT 
+    c.name, 
+    a.account_type, 
+    a.balance
+FROM 
+    Accounts a
+JOIN 
+    Customers c ON a.customer_id = c.customer_id
+WHERE 
+    a.balance > (SELECT AVG(balance) FROM Accounts);
+Explanation:
+•	SELECT c.name, a.account_type, a.balance: returns each customer’s name, account type, and balance.
+•	FROM Accounts a JOIN Customers c ON a.customer_id = c.customer_id: join accounts to customer info.
+•	WHERE a.balance > (SELECT AVG(balance) FROM Accounts): filter to accounts whose balance is greater than the average balance across all accounts. The subquery SELECT AVG(balance) FROM Accounts computes that average once.
+Notes:
+•	This compares account balances, not aggregated balances per customer. If customers can have multiple accounts and you want customers whose total balance exceeds average total across customers, you must aggregate per customer first.
+•	AVG(balance) will ignore NULL balances. If balances can be NULL, consider using COALESCE.
+________________________________________
+-- 4️⃣ List all customers living in “Mumbai”
+SELECT 
+    * 
+FROM 
+    Customers 
+WHERE 
+    city = 'Mumbai';
+Explanation: Simple select of all columns from Customers where the city column equals the string 'Mumbai'. This is case sensitive only if the column collation is case sensitive; by default MySQL string comparison is case insensitive for typical collations.
+________________________________________
+-- 5️⃣ Delete a transaction older than 30 days
+DELETE FROM 
+    Transactions
+WHERE 
+    transaction_date < (CURDATE() - INTERVAL 30 DAY);
+Line-by-line:
+•	DELETE FROM Transactions: removes rows from the Transactions table.
+•	WHERE transaction_date < (CURDATE() - INTERVAL 30 DAY): condition keeps only transactions with transaction_date earlier than 30 days before today. CURDATE() returns the current date. INTERVAL 30 DAY subtracts 30 days.
+Important caveats:
+•	This permanently deletes rows unless you are inside a transaction and roll back. DELETE is destructive.
+•	Because transaction_date is DATE (no time), the calculation uses date-only comparison.
+•	If referential constraints or triggers exist, they may block or cascade deletes depending on ON DELETE rules. In this schema Transactions references Accounts, not the other way around, so deleting transactions usually succeeds.
+•	Consider running SELECT * FROM Transactions WHERE ... first to preview which rows will be deleted.
+
+

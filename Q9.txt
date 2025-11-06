@@ -1,0 +1,226 @@
+9.Write a PL/SQL block using an explicit cursor to display all students enrolled in the “Computer Science” department, one by one.
+
+-- Create and use the database
+CREATE DATABASE IF NOT EXISTS college_db;
+USE college_db;
+
+-- Drop old objects if they exist
+DROP TABLE IF EXISTS students;
+DROP PROCEDURE IF EXISTS show_cs_students;
+
+-- Create students table
+CREATE TABLE students (
+  student_id INT AUTO_INCREMENT PRIMARY KEY,
+  first_name VARCHAR(50),
+  last_name VARCHAR(50),
+  department VARCHAR(100),
+  year INT
+);
+
+-- Insert sample data
+INSERT INTO students (first_name, last_name, department, year) VALUES
+('Asha', 'Kumar', 'Computer Science', 2),
+('Rohit', 'Patel', 'Mechanical', 3),
+('Leena', 'Shah', 'Computer Science', 1),
+('Daniel', 'Lewis', 'Civil', 4),
+('Maya', 'Rao', 'Computer Science', 3);
+
+-- Create stored procedure using explicit cursor
+DELIMITER //
+
+CREATE PROCEDURE show_cs_students()
+BEGIN
+  -- Declare variables
+  DECLARE v_id INT;
+  DECLARE v_fname VARCHAR(50);
+  DECLARE v_lname VARCHAR(50);
+  DECLARE v_dept VARCHAR(100);
+  DECLARE v_year INT;
+  DECLARE done INT DEFAULT 0;
+
+  -- Declare the cursor first
+  DECLARE cur_cs CURSOR FOR
+    SELECT student_id, first_name, last_name, department, year
+    FROM students
+    WHERE department = 'Computer Science'
+    ORDER BY student_id;
+
+  -- Then declare the handler after cursor
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+  -- Open the cursor
+  OPEN cur_cs;
+
+  fetch_loop: LOOP
+    FETCH cur_cs INTO v_id, v_fname, v_lname, v_dept, v_year;
+    IF done = 1 THEN
+      LEAVE fetch_loop;
+    END IF;
+
+    -- Show each student one by one
+    SELECT v_id AS student_id,
+           CONCAT(v_fname, ' ', v_lname) AS name,
+           v_dept AS department,
+           v_year AS year;
+  END LOOP fetch_loop;
+
+  -- Close the cursor
+  CLOSE cur_cs;
+END;
+//
+
+DELIMITER ;
+
+-- Call the procedure
+CALL show_cs_students();
+
+
+Line-by-line explanation and concepts — show_cs_students script
+Below I walk through your entire script in order. I explain what each statement does and the key concepts behind it. I’ll group lines that belong together so the explanation stays clear and easy to follow.
+________________________________________
+Database / cleanup
+CREATE DATABASE IF NOT EXISTS college_db;
+USE college_db;
+•	CREATE DATABASE IF NOT EXISTS college_db;
+Creates a database named college_db only if it does not already exist. This avoids an error when re-running the script.
+•	USE college_db;
+Switches the session to that database so all subsequent statements run inside college_db.
+DROP TABLE IF EXISTS students;
+DROP PROCEDURE IF EXISTS show_cs_students;
+•	These statements remove any existing students table and the stored procedure show_cs_students before you create new ones. This makes the script idempotent: you can run it repeatedly without "already exists" errors.
+________________________________________
+Table creation
+CREATE TABLE students (
+  student_id INT AUTO_INCREMENT PRIMARY KEY,
+  first_name VARCHAR(50),
+  last_name VARCHAR(50),
+  department VARCHAR(100),
+  year INT
+);
+•	CREATE TABLE students (...) creates a table named students.
+•	student_id INT AUTO_INCREMENT PRIMARY KEY
+o	INT is an integer column.
+o	AUTO_INCREMENT automatically gives each new row a unique increasing integer.
+o	PRIMARY KEY enforces uniqueness and makes student_id the primary identifier for each row.
+•	first_name VARCHAR(50), last_name VARCHAR(50) are text columns limited to 50 characters.
+•	department VARCHAR(100) stores the student’s department name.
+•	year INT stores the student’s academic year as an integer.
+Concepts: relational table, columns with types, primary key, auto increment.
+________________________________________
+Insert sample data
+INSERT INTO students (first_name, last_name, department, year) VALUES
+('Asha', 'Kumar', 'Computer Science', 2),
+('Rohit', 'Patel', 'Mechanical', 3),
+('Leena', 'Shah', 'Computer Science', 1),
+('Daniel', 'Lewis', 'Civil', 4),
+('Maya', 'Rao', 'Computer Science', 3);
+•	INSERT INTO ... VALUES (...) adds five rows to the students table. Each parenthesized list is one student.
+•	The order of values must match the column list (first_name, last_name, department, year).
+Concepts: data insertion, multiple-row insert.
+________________________________________
+Change delimiter for procedure definition
+DELIMITER //
+•	MySQL normally treats ; as the end of a statement. Stored procedure bodies contain many ; inside them, so we temporarily change the delimiter to //. That tells the server: keep reading until you see // before executing the whole block. Always remember to restore the delimiter after the procedure definition.
+Concepts: delimiter switching, parsing multi-statement blocks.
+________________________________________
+Create stored procedure with explicit cursor
+CREATE PROCEDURE show_cs_students()
+BEGIN
+  -- Declare variables
+  DECLARE v_id INT;
+  DECLARE v_fname VARCHAR(50);
+  DECLARE v_lname VARCHAR(50);
+  DECLARE v_dept VARCHAR(100);
+  DECLARE v_year INT;
+  DECLARE done INT DEFAULT 0;
+•	CREATE PROCEDURE show_cs_students() defines a stored procedure named show_cs_students that takes no parameters.
+•	BEGIN ... END contains the procedure body.
+•	DECLARE v_id INT; etc declare local variables used to hold column values fetched from the cursor.
+•	DECLARE done INT DEFAULT 0; declares a control flag. We will set done = 1 when the cursor runs out of rows.
+Concepts: stored procedure, local variables, variable declaration, default value.
+  -- Declare the cursor first
+  DECLARE cur_cs CURSOR FOR
+    SELECT student_id, first_name, last_name, department, year
+    FROM students
+    WHERE department = 'Computer Science'
+    ORDER BY student_id;
+•	DECLARE cur_cs CURSOR FOR <SELECT ...> defines an explicit cursor named cur_cs that will return rows produced by the SELECT. This SELECT returns only students in the Computer Science department, sorted by student_id.
+•	Important MySQL rule: cursor declarations must appear before handler declarations. That is why the cursor is declared here.
+Concepts: explicit cursor, result set pointer, row ordering.
+  -- Then declare the handler after cursor
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+•	DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1; creates a handler for the NOT FOUND condition. NOT FOUND occurs when a FETCH finds no more rows. When that happens the handler runs and sets done to 1. CONTINUE tells MySQL to continue execution after the handler, rather than terminating with an error.
+•	The handler is placed after cursor declarations per MySQL requirements.
+Concepts: exception/condition handlers in stored routines, NOT FOUND, graceful end-of-cursor handling.
+  -- Open the cursor
+  OPEN cur_cs;
+•	OPEN cur_cs; starts the cursor, allocating resources and positioning it before the first row of the result set.
+Concept: opening a cursor to prepare sequential fetching.
+  fetch_loop: LOOP
+    FETCH cur_cs INTO v_id, v_fname, v_lname, v_dept, v_year;
+    IF done = 1 THEN
+      LEAVE fetch_loop;
+    END IF;
+•	fetch_loop: LOOP starts a labeled loop named fetch_loop.
+•	FETCH cur_cs INTO ... reads the next row from the cursor and stores column values into the declared variables v_id, v_fname, ....
+•	If FETCH attempts to read beyond the last row, the NOT FOUND handler sets done = 1. Immediately after the fetch we test IF done = 1 THEN LEAVE fetch_loop; END IF; to exit the loop when there are no more rows.
+Concepts: fetch operation, loop control, handler interaction.
+    -- Show each student one by one
+    SELECT v_id AS student_id,
+           CONCAT(v_fname, ' ', v_lname) AS name,
+           v_dept AS department,
+           v_year AS year;
+  END LOOP fetch_loop;
+•	Inside the loop we SELECT the variable values. That produces a small result set for each fetched student. In the mysql CLI you will see one separate output table per SELECT. That is how the script displays students one by one.
+•	CONCAT(v_fname, ' ', v_lname) builds the full name string.
+Concepts: outputting values from variables, string concatenation, per-row result sets.
+  -- Close the cursor
+  CLOSE cur_cs;
+END;
+//
+•	CLOSE cur_cs; frees the resources associated with the cursor.
+•	END;// closes the procedure body and the // marks the end because we changed the delimiter earlier.
+Concepts: resource cleanup, procedure termination, delimiter termination.
+________________________________________
+Restore delimiter and call procedure
+DELIMITER ;
+•	Restores the default semicolon ; delimiter so normal statements resume.
+CALL show_cs_students();
+•	Executes the stored procedure. For each Computer Science student the procedure will produce a small result table showing student_id, name, department, and year.
+Concepts: calling a stored procedure, client result sets.
+________________________________________
+Behavior you will see in the mysql CLI
+•	When you CALL show_cs_students(); the console will display one result set per SELECT inside the loop. For three Computer Science students you will see three small tables printed sequentially.
+•	If you prefer a single combined result, you can skip the cursor and run a simple query:
+•	SELECT student_id, CONCAT(first_name,' ', last_name) AS name, department, year
+•	FROM students
+•	WHERE department = 'Computer Science'
+•	ORDER BY student_id;
+That returns all rows in one table and is more efficient for read-only listing.
+________________________________________
+Common pitfalls and tips
+•	Order of DECLAREs matters in MySQL stored routines: declare cursors first, then handlers, then variables if you prefer, but never declare a cursor after a handler. The error you saw earlier (Cursor declaration after handler declaration) is caused by wrong order.
+•	DELIMITER must be changed before creating a procedure and restored afterwards. If you forget DELIMITER // MySQL will think the first internal ; ends the CREATE PROCEDURE prematurely and the procedure will not be created.
+•	Each SELECT inside the loop produces a separate result set. Some GUI tools might aggregate or display them differently.
+•	Cursors are row-by-row constructs and are slower for large result sets. Use set-based SQL (a single SELECT) when possible.
+•	You need appropriate privileges to create procedures (CREATE ROUTINE) and tables.
+________________________________________
+Summary of concepts used (quick list)
+•	Database and schema selection: CREATE DATABASE, USE
+•	Table definition: CREATE TABLE, data types, AUTO_INCREMENT, PRIMARY KEY
+•	Data insertion: INSERT INTO ... VALUES
+•	Stored routines: CREATE PROCEDURE, BEGIN ... END, CALL
+•	Delimiter management: DELIMITER // and restoring ;
+•	Variables: DECLARE var TYPE
+•	Explicit cursors: DECLARE cur CURSOR FOR <SELECT>, OPEN, FETCH, CLOSE
+•	Handlers: DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1
+•	Loop and control flow: LOOP, LEAVE
+•	Output: SELECT of variables, CONCAT
+•	Error to avoid: cursor declared after handler
+________________________________________
+If you want, I can:
+•	Provide a version that writes each fetched row to a log table instead of printing it,
+•	Or convert this to a single-result-set version if you only need to display all rows once,
+•	Or show the exact mysql CLI interaction example so you can copy-paste and match expected output.
+Which one would you like next?
+

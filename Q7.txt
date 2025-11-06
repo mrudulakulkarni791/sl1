@@ -1,0 +1,257 @@
+7.Design and Develop MongoDB Queries using CRUD operations. (Use CRUD operations, SAVE method, logical operators)
+
+// 0. Switch to a working database (will be created if not present)
+use hotel_reservation_db
+
+// 1. Clean start: drop collections if they exist (safe to re-run)
+db.hotels.drop()
+db.rooms.drop()
+db.guests.drop()
+db.reservations.drop()
+
+// 2. CREATE — Insert documents
+// Insert one hotel
+db.hotels.insertOne({
+  _id: ObjectId(),            // explicit ObjectId for clarity (Mongo will auto-create one if omitted)
+  name: "Sea Breeze Hotel",
+  city: "Goa",
+  address: "Beach Road, Goa",
+  stars: 4
+})
+
+// Insert many rooms (multiple documents)
+db.rooms.insertMany([
+  { hotelId: db.hotels.findOne({ name: "Sea Breeze Hotel" })._id, roomNo: "101", type: "Single", price: 2000, amenities: ["AC","WiFi"] },
+  { hotelId: db.hotels.findOne({ name: "Sea Breeze Hotel" })._id, roomNo: "102", type: "Double", price: 3500, amenities: ["AC","WiFi","TV"] },
+  { hotelId: db.hotels.findOne({ name: "Sea Breeze Hotel" })._id, roomNo: "201", type: "Suite",  price: 7000, amenities: ["AC","WiFi","TV","MiniBar"] }
+])
+
+// Insert guests
+db.guests.insertMany([
+  { name: "Asha Kumar", email: "asha.kumar@example.com", phone: "9876543210" },
+  { name: "Rohit Patel", email: "rohit.patel@example.com", phone: "9123456780" }
+])
+
+// Insert reservations (use references via room _id and guest _id)
+// find one room & guest ids to reference
+const room101 = db.rooms.findOne({ roomNo: "101" })
+const guestAsha = db.guests.findOne({ name: "Asha Kumar" })
+
+db.reservations.insertOne({
+  roomId: room101._id,
+  guestId: guestAsha._id,
+  checkIn: ISODate("2025-11-01"),
+  checkOut: ISODate("2025-11-05"),
+  status: "booked",
+  createdAt: new Date()
+})
+
+// 3. SAVE method examples
+// save() behaves as insert when _id is absent | behaves as replace when _id exists.
+// (Note: save() is deprecated in some newer shells; insertOne/replaceOne are preferred.)
+/* Example A: save as insert (no _id) */
+db.rooms.save({ hotelId: room101.hotelId, roomNo: "103", type: "Single", price: 2200 })
+
+/* Example B: save as replace (document with same _id will be replaced) */
+let r = db.rooms.findOne({ roomNo: "103" })
+r.price = 2300
+db.rooms.save(r)   // replaces the entire document with the modified "r"
+
+// 4. READ queries (find) — simple and with logical operators
+
+// 4a. Find all hotels in Goa
+db.hotels.find({ city: "Goa" })
+
+// 4b. Find rooms priced greater than or equal to 3000 (use comparison operator)
+db.rooms.find({ price: { $gte: 3000 } })
+
+// 4c. Find rooms that are either 'Suite' or have price > 6000 (use $or)
+db.rooms.find({
+  $or: [
+    { type: "Suite" },
+    { price: { $gt: 6000 } }
+  ]
+})
+
+// 4d. Find reservations where status is 'booked' AND checkIn is on or after 2025-11-01 ($and)
+db.reservations.find({
+  $and: [
+    { status: "booked" },
+    { checkIn: { $gte: ISODate("2025-11-01") } }
+  ]
+})
+
+// 4e. Find guests whose email does NOT end with 'example.com' (use $not with regex)
+db.guests.find({ email: { $not: /@example\.com$/ } })
+
+// 4f. Find rooms that have both 'AC' and 'WiFi' in amenities (use $all)
+db.rooms.find({ amenities: { $all: ["AC", "WiFi"] } })
+
+// 4g. Find rooms whose roomNo is in a set (use $in)
+db.rooms.find({ roomNo: { $in: ["101", "201"] } })
+
+// 4h. Find hotels that do NOT have 'stars' field set (use $exists with $not)
+db.hotels.find({ stars: { $exists: false } })
+
+// 5. JOIN-like operation using $lookup (aggregation)
+// List reservations with joined room and guest details (left-join style)
+db.reservations.aggregate([
+  {
+    $lookup: {
+      from: "rooms",
+      localField: "roomId",
+      foreignField: "_id",
+      as: "room"          // room will be an array (0 or 1 element)
+    }
+  },
+  { $unwind: "$room" },   // convert room array to object (skip if absent)
+  {
+    $lookup: {
+      from: "guests",
+      localField: "guestId",
+      foreignField: "_id",
+      as: "guest"
+    }
+  },
+  { $unwind: "$guest" },
+  {
+    $project: {
+      _id: 1,
+      status: 1,
+      checkIn: 1,
+      checkOut: 1,
+      "room.roomNo": 1,
+      "room.type": 1,
+      "room.price": 1,
+      "guest.name": 1,
+      "guest.email": 1
+    }
+  }
+])
+
+// 6. UPDATE operations
+
+// 6a. updateOne: change reservation status to 'completed' for a specific reservation
+db.reservations.updateOne(
+  { _id: db.reservations.findOne()._id },   // match first reservation (example)
+  { $set: { status: "completed", updatedAt: new Date() } }
+)
+
+// 6b. updateMany: increase price by 10% for all 'Single' rooms
+db.rooms.updateMany(
+  { type: "Single" },
+  [{ $set: { price: { $multiply: ["$price", 1.10] } } }]   // aggregation pipeline update (Mongo 4.2+)
+)
+
+// 6c. upsert example: set a hotel's contact number, insert if not exists
+db.hotels.updateOne(
+  { name: "Sunrise Resort" },                 // filter
+  { $set: { contact: "+91-8000000000", city: "Goa" } }, // update doc
+  { upsert: true }                            // insert if no match
+)
+
+// 7. DELETE operations
+
+// 7a. deleteOne: remove a specific room by roomNo
+db.rooms.deleteOne({ roomNo: "102" })
+
+// 7b. deleteMany: remove all reservations with status 'cancelled'
+db.reservations.deleteMany({ status: "cancelled" })
+
+// 8. Logical operator $nor example: rooms that are neither 'Single' nor priced below 3000
+db.rooms.find({ $nor: [{ type: "Single" }, { price: { $lt: 3000 } }] })
+
+// 9. Final reads to show current state
+print("Hotels:")
+db.hotels.find().forEach(printjson)
+print("Rooms:")
+db.rooms.find().forEach(printjson)
+print("Guests:")
+db.guests.find().forEach(printjson)
+print("Reservations:")
+db.reservations.find().forEach(printjson)
+
+
+
+🧩 1. Start MongoDB server
+
+If the server isn’t running, start it with:
+
+sudo systemctl start mongod
+
+
+Check the status to confirm:
+
+sudo systemctl status mongod
+
+
+If it says “active (running)” — you’re good.
+
+🧩 2. Open the MongoDB shell
+
+Type:
+
+mongosh
+
+
+This opens the MongoDB Shell (mongosh) — you’ll see a prompt like:
+
+test>
+
+
+You can now type MongoDB commands directly inside this shell.
+
+
+
+Line-by-line explanation & concepts used
+I'll explain the script in the same order you will run it. I group closely related commands and explain them simply.
+0. use hotel_reservation_db
+Switch to (or create) the database named hotel_reservation_db. MongoDB creates the DB when you first store data in it.
+1. drop() calls
+db.collection.drop() removes the collection if it exists. This ensures the script can be re-run from a clean state without duplicate data or schema leftovers.
+2. CREATE — insertOne / insertMany
+•	db.hotels.insertOne({...})
+Adds a single document to the hotels collection. Documents are BSON objects similar to JSON. _id uniquely identifies the doc. If you omit _id, MongoDB generates it automatically.
+•	db.rooms.insertMany([...])
+Inserts several room documents at once. Notice hotelId: db.hotels.findOne({ name: "Sea Breeze Hotel" })._id — this looks up the hotel we created and stores its _id as a reference. This is a common pattern in MongoDB: you reference related documents by storing their _id. MongoDB does not enforce foreign keys; the references are by convention.
+•	db.guests.insertMany([...]) adds guest documents.
+•	db.reservations.insertOne({...}) stores a reservation. It uses ISODate(...) or new Date() for date/time values. ISODate() is an alias in the shell for creating proper BSON dates.
+3. save() method
+•	db.rooms.save({...}) behaves differently depending on whether the document includes an _id:
+o	If _id is absent, save() acts like insertOne() (inserts a new doc).
+o	If _id exists, save() replaces the whole document with the provided object (like replaceOne).
+Note: many modern projects prefer insertOne, replaceOne, or updateOne because save() is considered deprecated in some environments. I included it because you asked for it; examples show an insert- and a replace-style usage.
+4. READ / Query examples and logical operators
+•	db.hotels.find({ city: "Goa" }) — basic equality filter. Returns all hotels where the city field equals "Goa".
+•	db.rooms.find({ price: { $gte: 3000 } }) — uses comparison operator $gte (greater than or equal).
+•	$or example: db.rooms.find({ $or: [ { type: "Suite" }, { price: { $gt: 6000 } } ] }) — returns documents that satisfy either condition.
+•	$and example: db.reservations.find({ $and: [ { status: "booked" }, { checkIn: { $gte: ISODate("2025-11-01") } } ] }) — both conditions must be true. Note: an $and of multiple conditions can often be expressed more simply by placing all conditions at the top level (Mongo implicitly ANDs them), but explicit $and is useful for clarity or when combining repeated fields.
+•	$not with regex: db.guests.find({ email: { $not: /@example\.com$/ } }) — find documents where email does not match the regex. $not negates the given condition.
+•	$all: db.rooms.find({ amenities: { $all: ["AC", "WiFi"] } }) — used for arrays: returns docs where the array contains all the listed elements (order doesn't matter).
+•	$in: db.rooms.find({ roomNo: { $in: ["101", "201"] } }) — field value in a specified array.
+•	$exists: db.hotels.find({ stars: { $exists: false } }) — find documents missing a field.
+5. JOIN-like operation: $lookup (aggregation)
+•	db.reservations.aggregate([...]) with $lookup is the standard way to join collections in MongoDB's aggregation framework. It's a left-join: every reservation gets a room array with matching rooms. $unwind turns the array into a single object. We then $lookup guests, $unwind the result, and $project to show chosen fields. This is how you perform relational-style joins in MongoDB.
+6. UPDATE operations
+•	updateOne(filter, update) updates the first document matching filter. The $set operator sets specific fields. We also store updatedAt timestamp.
+•	updateMany(filter, update) updates multiple documents. The example uses an aggregation pipeline update ([{ $set: { price: { $multiply: ["$price", 1.10] } } }]) — this is supported in MongoDB 4.2+ and lets you compute new values based on the current document fields (here, increasing price by 10%).
+•	updateOne(..., { upsert: true }) — upsert either updates an existing doc that matches or inserts a new one if none matches. Useful for "create or update" logic.
+7. DELETE operations
+•	deleteOne(filter) removes a single document matching the filter.
+•	deleteMany(filter) removes all matching documents.
+8. $nor example
+•	$nor is the negation of $or. db.rooms.find({ $nor: [{ type: "Single" }, { price: { $lt: 3000 } }] }) returns rooms that are neither type "Single" nor priced less than 3000.
+9. Final prints
+•	print("Hotels:") then db.hotels.find().forEach(printjson) lists remaining documents in a readable format. Useful to inspect final state after updates and deletes.
+________________________________________
+Extra notes & tips
+•	Running the script non-interactively: If you save the commands in a file mongo_script.js, you can run: mongosh mongo_script.js or mongosh --file mongo_script.js (depending on your mongosh version) to run them from Ubuntu terminal without interactive pasting.
+•	save() deprecation: Newer mongosh emphasizes insertOne/insertMany, updateOne/updateMany, and replaceOne. save() still works in some shells but may be removed; if you get an error, replace save(doc) with either insertOne(doc) when _id missing or replaceOne({ _id: doc._id }, doc) when replacing.
+•	Schema design: MongoDB is schema-flexible. This example uses references (hotelId, roomId, guestId) similar to foreign keys. Another common design is embedding (example: embedding room documents inside a hotel), which simplifies reads but can complicate updates for large embedded arrays.
+•	Logical operator tips:
+o	$and can be omitted if conditions are top-level (they’re ANDed by default).
+o	$or and $nor are essential for complex filters.
+o	Use $in/$nin for membership tests.
+o	$exists helps find documents with missing fields.
+
+

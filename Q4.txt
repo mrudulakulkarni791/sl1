@@ -1,0 +1,320 @@
+4.Design and develop SQL DDL and DML statements for the E-commerce database to manage products, customers, and orders for an online store.
+Also execute queries for following:
+1.Find customers who ordered the product “Laptop.”
+2.List products from highest to lowest price.
+3.Display categories with sales above ₹50,000.
+4.Show total sales per category.
+Update product prices by +10%.
+
+
+-- Create and use database
+CREATE DATABASE IF NOT EXISTS ecommerce_db;
+USE ecommerce_db;
+
+-- Drop tables if they exist (clean rerun) — drop child tables first
+DROP TABLE IF EXISTS OrderItems;
+DROP TABLE IF EXISTS Orders;
+DROP TABLE IF EXISTS Products;
+DROP TABLE IF EXISTS Customers;
+
+-- 1. Create tables (DDL)
+
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE,
+    city VARCHAR(100)
+) ENGINE=InnoDB;
+
+CREATE TABLE Products (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    category VARCHAR(100),
+    price DECIMAL(12,2) NOT NULL,
+    stock INT DEFAULT 0
+) ENGINE=InnoDB;
+
+CREATE TABLE Orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    order_date DATE NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE OrderItems (
+    order_item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL, -- store price at time of order
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES Products(product_id)
+) ENGINE=InnoDB;
+
+-- 2. Insert sample data (DML)
+
+INSERT INTO Customers (name, email, city) VALUES
+('Aman Kulkarni', 'aman.k@example.com', 'Mumbai'),
+('Neha Reddy', 'neha.r@example.com', 'Bengaluru'),
+('Vikash Gupta', 'vikash.g@example.com', 'Pune');
+
+INSERT INTO Products (product_name, category, price, stock) VALUES
+('Laptop', 'Electronics', 70000.00, 10),
+('Wireless Mouse', 'Electronics', 1200.00, 100),
+('Office Chair', 'Furniture', 8000.00, 20),
+('Coffee Maker', 'Home Appliances', 3500.00, 15),
+('Headphones', 'Electronics', 2500.00, 50);
+
+-- Orders (one per row)
+INSERT INTO Orders (customer_id, order_date) VALUES
+(1, '2025-10-05'),
+(2, '2025-10-10'),
+(1, '2025-10-12'),
+(3, '2025-09-30');
+
+-- OrderItems (link products and orders with quantities and unit prices)
+INSERT INTO OrderItems (order_id, product_id, quantity, unit_price) VALUES
+(1, 1, 1, 70000.00),   -- Aman ordered 1 Laptop (₹70,000)
+(1, 2, 2, 1200.00),    -- Aman also ordered 2 mice
+(2, 3, 1, 8000.00),    -- Neha ordered 1 Office Chair
+(2, 5, 2, 2500.00),    -- Neha ordered 2 Headphones
+(3, 4, 1, 3500.00),    -- Aman ordered 1 Coffee Maker
+(4, 1, 1, 70000.00);   -- Vikash ordered 1 Laptop (₹70,000)
+
+-- 3. Queries requested
+
+-- 1) Find customers who ordered the product "Laptop"
+SELECT DISTINCT
+    c.customer_id,
+    c.name,
+    c.email,
+    c.city
+FROM
+    Customers c
+JOIN Orders o ON c.customer_id = o.customer_id
+JOIN OrderItems oi ON o.order_id = oi.order_id
+JOIN Products p ON oi.product_id = p.product_id
+WHERE
+    p.product_name = 'Laptop';
+
+-- 2) List products from highest to lowest price
+SELECT
+    product_id,
+    product_name,
+    category,
+    price
+FROM
+    Products
+ORDER BY
+    price DESC;
+
+-- 3) Display categories with sales above ₹50,000
+-- Sales computed as sum(quantity * unit_price) per category
+SELECT
+    p.category,
+    ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total_sales
+FROM
+    OrderItems oi
+JOIN Products p ON oi.product_id = p.product_id
+GROUP BY
+    p.category
+HAVING
+    SUM(oi.quantity * oi.unit_price) > 50000;
+
+-- 4) Show total sales per category
+SELECT
+    p.category,
+    ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total_sales
+FROM
+    OrderItems oi
+JOIN Products p ON oi.product_id = p.product_id
+GROUP BY
+    p.category
+ORDER BY
+    total_sales DESC;
+
+-- 5) Update product prices by +10%
+UPDATE Products
+SET price = ROUND(price * 1.10, 2);
+
+-- Optional: display products after price update
+SELECT product_id, product_name, category, price FROM Products;
+
+-- End of script
+
+
+
+
+
+
+
+
+Detailed explanation — line by line
+I explain each block and the important lines so you know what's happening and why.
+Create and use database
+CREATE DATABASE IF NOT EXISTS ecommerce_db;
+Creates a database named ecommerce_db if it does not already exist. A database is a container for tables and other objects.
+USE ecommerce_db;
+Switches the active database to ecommerce_db so subsequent statements create objects inside it.
+Drop tables if they exist
+DROP TABLE IF EXISTS OrderItems;
+DROP TABLE IF EXISTS Orders;
+DROP TABLE IF EXISTS Products;
+DROP TABLE IF EXISTS Customers;
+Removes existing tables so you can rerun the script without errors. The order matters: child tables that reference other tables via foreign keys are dropped first to avoid constraint errors.
+Create Customers table
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE,
+    city VARCHAR(100)
+) ENGINE=InnoDB;
+•	customer_id INT AUTO_INCREMENT PRIMARY KEY: creates an integer primary key that auto-increments for every new customer. Primary key uniquely identifies rows.
+•	name VARCHAR(100) NOT NULL: customer name, required (NOT NULL).
+•	email VARCHAR(150) UNIQUE: email with a uniqueness constraint to avoid duplicates.
+•	city VARCHAR(100): city name, optional.
+•	ENGINE=InnoDB: InnoDB supports transactions and foreign keys.
+Create Products table
+CREATE TABLE Products (
+    product_id INT AUTO_INCREMENT PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    category VARCHAR(100),
+    price DECIMAL(12,2) NOT NULL,
+    stock INT DEFAULT 0
+) ENGINE=InnoDB;
+•	product_id is the unique id.
+•	product_name is the product title.
+•	category groups products, e.g. Electronics or Furniture.
+•	price DECIMAL(12,2) stores money values precisely; 12,2 allows large values with two decimals.
+•	stock INT DEFAULT 0 tracks available units; default is zero.
+Create Orders table
+CREATE TABLE Orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    order_date DATE NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id)
+) ENGINE=InnoDB;
+•	order_id unique id for each order.
+•	customer_id links the order to a customer; NOT NULL forces the link.
+•	order_date stores the date of the order.
+•	FOREIGN KEY enforces that customer_id must exist in Customers.
+Create OrderItems table
+CREATE TABLE OrderItems (
+    order_item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL, -- store price at time of order
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES Products(product_id)
+) ENGINE=InnoDB;
+•	This is a junction table that stores items inside an order.
+•	order_item_id unique id for the item row.
+•	order_id references the Orders table.
+•	product_id references the Products table.
+•	quantity number of units ordered; default is 1.
+•	unit_price stores the price at the time of the order. Storing unit price avoids historical inconsistencies if product price changes later.
+•	FOREIGN KEY clauses enforce referential integrity.
+Insert sample customers
+INSERT INTO Customers (name, email, city) VALUES
+('Aman Kulkarni', 'aman.k@example.com', 'Mumbai'),
+('Neha Reddy', 'neha.r@example.com', 'Bengaluru'),
+('Vikash Gupta', 'vikash.g@example.com', 'Pune');
+Adds three sample customers. customer_id is omitted because it auto-generates.
+Insert sample products
+INSERT INTO Products (product_name, category, price, stock) VALUES
+('Laptop', 'Electronics', 70000.00, 10),
+('Wireless Mouse', 'Electronics', 1200.00, 100),
+('Office Chair', 'Furniture', 8000.00, 20),
+('Coffee Maker', 'Home Appliances', 3500.00, 15),
+('Headphones', 'Electronics', 2500.00, 50);
+Adds sample products including Laptop. Prices are in rupees; DECIMAL keeps them precise.
+Insert sample orders
+INSERT INTO Orders (customer_id, order_date) VALUES
+(1, '2025-10-05'),
+(2, '2025-10-10'),
+(1, '2025-10-12'),
+(3, '2025-09-30');
+Creates four orders for the sample customers.
+Insert sample order items
+INSERT INTO OrderItems (order_id, product_id, quantity, unit_price) VALUES
+(1, 1, 1, 70000.00),   -- Aman ordered 1 Laptop
+(1, 2, 2, 1200.00),    -- Aman ordered 2 mice
+(2, 3, 1, 8000.00),    -- Neha ordered 1 Office Chair
+(2, 5, 2, 2500.00),    -- Neha ordered 2 Headphones
+(3, 4, 1, 3500.00),    -- Aman ordered 1 Coffee Maker
+(4, 1, 1, 70000.00);   -- Vikash ordered 1 Laptop
+Links each order to products and records quantities and unit prices. The two laptop orders ensure Electronics category sales will exceed ₹50,000 in the sample.
+Query 1 — customers who ordered "Laptop"
+SELECT DISTINCT
+    c.customer_id,
+    c.name,
+    c.email,
+    c.city
+FROM
+    Customers c
+JOIN Orders o ON c.customer_id = o.customer_id
+JOIN OrderItems oi ON o.order_id = oi.order_id
+JOIN Products p ON oi.product_id = p.product_id
+WHERE
+    p.product_name = 'Laptop';
+•	JOIN chains Customers → Orders → OrderItems → Products so we can find which customers are linked to a product.
+•	WHERE p.product_name = 'Laptop' filters to laptop orders.
+•	DISTINCT ensures each customer appears only once even if they ordered the laptop multiple times.
+•	Result: list of customers who bought the product named "Laptop".
+Query 2 — products from highest to lowest price
+SELECT
+    product_id,
+    product_name,
+    category,
+    price
+FROM
+    Products
+ORDER BY
+    price DESC;
+•	ORDER BY price DESC sorts products from most expensive to least expensive.
+•	Useful for price-based browsing or admin reports.
+Query 3 — categories with sales above ₹50,000
+SELECT
+    p.category,
+    ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total_sales
+FROM
+    OrderItems oi
+JOIN Products p ON oi.product_id = p.product_id
+GROUP BY
+    p.category
+HAVING
+    SUM(oi.quantity * oi.unit_price) > 50000;
+•	SUM(oi.quantity * oi.unit_price) computes total revenue per category from the order items.
+•	GROUP BY p.category aggregates sales by category.
+•	HAVING filters groups to those whose total sales exceed 50,000.
+•	ROUND(..., 2) formats the total_sales to two decimals.
+Query 4 — total sales per category
+SELECT
+    p.category,
+    ROUND(SUM(oi.quantity * oi.unit_price), 2) AS total_sales
+FROM
+    OrderItems oi
+JOIN Products p ON oi.product_id = p.product_id
+GROUP BY
+    p.category
+ORDER BY
+    total_sales DESC;
+•	Same aggregation as query 3 but returns all categories and sorts them by sales highest to lowest.
+Query 5 — update product prices by +10%
+UPDATE Products
+SET price = ROUND(price * 1.10, 2);
+•	Multiplies each product's price by 1.10 to increase prices by 10 percent.
+•	ROUND(..., 2) keeps two decimal places.
+•	This updates the Products table in place. Stored unit_price in existing OrderItems stays unchanged, preserving historical order prices.
+Optional result check
+SELECT product_id, product_name, category, price FROM Products;
+Shows the updated product prices so you can verify the update.
+________________________________________
+Practical notes and suggestions
+•	This is a simple model for learning and small demos. Real e-commerce systems use more fields such as shipping address, order status, payment records, timestamps, audit logs, and normalized category tables.
+•	Storing unit_price in OrderItems is important. If you only store a link to Products and later change product prices, historical order values become inconsistent.
+•	Consider adding indexes on OrderItems.product_id, OrderItems.order_id, and Orders.customer_id for performance with large data.
+•	If you plan to run price updates or other bulk changes in production, wrap them in transactions or test first.
+•	If you want safe updates for a subset of products, add a WHERE clause to the UPDATE.
+

@@ -1,0 +1,120 @@
+8.Write a PL/SQL block that accepts marks (out of 100) and prints:
+“Distinction” if marks ≥ 75
+“First Class” if 60–74
+“Second Class” if 50–59
+“Fail” otherwise.
+Handle invalid marks (e.g., <0 or >100).
+
+
+✅ MySQL Code (Simple & Runnable)
+
+Save and run this in your MySQL terminal or script file.
+
+-- Switch to or create a test database
+CREATE DATABASE IF NOT EXISTS student_db;
+USE student_db;
+
+-- Drop the procedure if it already exists
+DROP PROCEDURE IF EXISTS check_result;
+
+-- Change delimiter so MySQL can detect where the procedure ends
+DELIMITER //
+
+CREATE PROCEDURE check_result(IN marks INT)
+BEGIN
+    IF marks < 0 OR marks > 100 THEN
+        SELECT 'Invalid marks! Please enter marks between 0 and 100.' AS Result;
+    ELSEIF marks >= 75 THEN
+        SELECT 'Distinction' AS Result;
+    ELSEIF marks >= 60 THEN
+        SELECT 'First Class' AS Result;
+    ELSEIF marks >= 50 THEN
+        SELECT 'Second Class' AS Result;
+    ELSE
+        SELECT 'Fail' AS Result;
+    END IF;
+END;
+//
+
+-- Reset the delimiter back to semicolon
+DELIMITER ;
+
+-- Example calls to test
+CALL check_result(85);
+CALL check_result(63);
+CALL check_result(55);
+CALL check_result(30);
+CALL check_result(105);
+
+
+
+
+
+Step-by-step Explanation
+1. Create or use a database
+CREATE DATABASE IF NOT EXISTS student_db;
+USE student_db;
+This ensures we’re working inside a specific schema (student_db).
+________________________________________
+2. Drop old procedure
+DROP PROCEDURE IF EXISTS check_result;
+Removes an existing version if you’re re-running the code.
+________________________________________
+3. Change the delimiter
+DELIMITER //
+MySQL normally ends commands with ;, but stored procedures contain many semicolons inside.
+So, we temporarily change the delimiter to // to mark the end of the full procedure.
+________________________________________
+4. Create the procedure
+CREATE PROCEDURE check_result(IN marks INT)
+Creates a stored procedure named check_result that takes one input parameter (marks).
+________________________________________
+5. Procedure body
+BEGIN
+    IF marks < 0 OR marks > 100 THEN
+        SELECT 'Invalid marks! Please enter marks between 0 and 100.' AS Result;
+    ELSEIF marks >= 75 THEN
+        SELECT 'Distinction' AS Result;
+    ELSEIF marks >= 60 THEN
+        SELECT 'First Class' AS Result;
+    ELSEIF marks >= 50 THEN
+        SELECT 'Second Class' AS Result;
+    ELSE
+        SELECT 'Fail' AS Result;
+    END IF;
+END;
+What happens:
+•	The procedure checks each condition in order using IF, ELSEIF, and ELSE.
+•	For each case, it uses SELECT '...' AS Result; to display the output message.
+________________________________________
+6. End of procedure
+//
+DELIMITER ;
+The // line marks the end of the procedure definition, and then we restore the delimiter back to ;.
+________________________________________
+7. Calling (executing) the procedure
+CALL check_result(85);  -- Outputs: Distinction
+CALL check_result(63);  -- Outputs: First Class
+CALL check_result(55);  -- Outputs: Second Class
+CALL check_result(30);  -- Outputs: Fail
+CALL check_result(105); -- Outputs: Invalid marks! Please enter marks between 0 and 100.
+Each call runs the stored procedure with the given marks and prints the result.
+________________________________________
+✅ Expected Output
+Command	Output
+CALL check_result(85);	Distinction
+CALL check_result(63);	First Class
+CALL check_result(55);	Second Class
+CALL check_result(30);	Fail
+CALL check_result(105);	Invalid marks! Please enter marks between 0 and 100.
+________________________________________
+🧠 Key Concepts Used
+Concept	Description
+Stored Procedure	A saved block of SQL that can be executed repeatedly with different inputs.
+IN parameter	Input value passed to the procedure.
+IF / ELSEIF / ELSE	Conditional statements inside the procedure.
+SELECT 'text' AS Result	Displays messages as output.
+DELIMITER	Temporarily changes the statement-ending character so MySQL can parse procedure definitions correctly.
+________________________________________
+Would you like me to show you how to accept the marks as user input (for example, prompting inside MySQL or passing it from a terminal variable)?
+

@@ -1,0 +1,256 @@
+5. Design and develop SQL DDL and DML statements for the Hotel Reservation System to manage hotels, rooms, and reservations.
+Also execute queries for following:
+1.Show hotels with more than 3 rooms booked.
+2.List rooms by price descending.
+3.Find number of rooms booked per hotel.
+4.Find guests staying in the most expensive hotel.
+List all available rooms in “Goa.”
+
+
+
+-- 1. Create a database and use it
+CREATE DATABASE IF NOT EXISTS hotel_reservation;
+USE hotel_reservation;
+
+-- 2. DDL: Create tables
+CREATE TABLE hotels (
+  hotel_id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  city VARCHAR(50) NOT NULL,
+  address VARCHAR(200)
+);
+
+CREATE TABLE rooms (
+  room_id INT AUTO_INCREMENT PRIMARY KEY,
+  hotel_id INT NOT NULL,
+  room_number VARCHAR(20) NOT NULL,
+  type VARCHAR(50),            -- e.g., 'Single', 'Double', 'Suite'
+  price DECIMAL(10,2) NOT NULL,
+  FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id)
+);
+
+CREATE TABLE guests (
+  guest_id INT AUTO_INCREMENT PRIMARY KEY,
+  first_name VARCHAR(50) NOT NULL,
+  last_name VARCHAR(50) NOT NULL,
+  email VARCHAR(100)
+);
+
+CREATE TABLE reservations (
+  reservation_id INT AUTO_INCREMENT PRIMARY KEY,
+  room_id INT NOT NULL,
+  guest_id INT NOT NULL,
+  check_in DATE NOT NULL,
+  check_out DATE NOT NULL,
+  status ENUM('booked','cancelled','completed') DEFAULT 'booked',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(room_id),
+  FOREIGN KEY (guest_id) REFERENCES guests(guest_id)
+);
+
+-- 3. DML: Insert sample hotels
+INSERT INTO hotels (name, city, address) VALUES
+('Sea Breeze Hotel', 'Goa', 'Beach Road, Goa'),
+('Mountain View Inn', 'Lonavala', 'Hilltop Lane, Lonavala'),
+('City Grand', 'Mumbai', 'Central Avenue, Mumbai'),
+('Luxury Bay', 'Goa', 'North Beach, Goa');
+
+-- 4. DML: Insert sample rooms
+INSERT INTO rooms (hotel_id, room_number, type, price) VALUES
+(1, '101', 'Single', 2000.00),
+(1, '102', 'Double', 3500.00),
+(1, '201', 'Suite', 7000.00),
+(4, '101', 'Double', 5000.00),
+(4, '102', 'Suite', 12000.00),
+(2, '10', 'Single', 2500.00),
+(2, '11', 'Double', 4000.00),
+(3, '301', 'Single', 3000.00),
+(3, '302', 'Double', 4500.00),
+(3, '303', 'Suite', 9000.00);
+
+-- 5. DML: Insert sample guests
+INSERT INTO guests (first_name, last_name, email) VALUES
+('Asha', 'Kumar', 'asha.kumar@example.com'),
+('Rohit', 'Patel', 'rohit.patel@example.com'),
+('Leena', 'Shah', 'leena.shah@example.com'),
+('Daniel', 'Lewis', 'daniel.lewis@example.com');
+
+-- 6. DML: Insert sample reservations
+-- some in Goa, some in other cities; some completed, some booked
+INSERT INTO reservations (room_id, guest_id, check_in, check_out, status) VALUES
+(1, 1, '2025-11-01', '2025-11-05', 'booked'),    -- Sea Breeze 101 booked by Asha
+(2, 2, '2025-11-02', '2025-11-04', 'booked'),    -- Sea Breeze 102 booked by Rohit
+(3, 3, '2025-10-20', '2025-10-25', 'completed'), -- Sea Breeze 201 completed by Leena
+(4, 4, '2025-11-03', '2025-11-08', 'booked'),    -- Luxury Bay 101 booked by Daniel
+(5, 2, '2025-11-10', '2025-11-12', 'booked'),    -- Luxury Bay 102 future booking by Rohit
+(6, 1, '2025-09-01', '2025-09-03', 'completed'),
+(7, 3, '2025-09-10', '2025-09-12', 'completed'),
+(8, 4, '2025-11-01', '2025-11-02', 'booked'),
+(9, 2, '2025-11-04', '2025-11-06', 'booked'),
+(10,1, '2025-11-05', '2025-11-07', 'booked');
+
+-- 7. Queries you requested
+
+-- Q1: Show hotels with more than 3 rooms booked.
+SELECT h.hotel_id, h.name, h.city, COUNT(DISTINCT r.room_id) AS rooms_booked
+FROM hotels h
+JOIN rooms r ON r.hotel_id = h.hotel_id
+JOIN reservations res ON res.room_id = r.room_id
+WHERE res.status = 'booked'
+GROUP BY h.hotel_id, h.name, h.city
+HAVING COUNT(DISTINCT r.room_id) > 3;
+
+-- Q2: List rooms by price descending.
+SELECT r.room_id, r.room_number, r.type, r.price, h.name AS hotel_name, h.city
+FROM rooms r
+JOIN hotels h ON r.hotel_id = h.hotel_id
+ORDER BY r.price DESC;
+
+-- Q3: Find number of rooms booked per hotel.
+SELECT h.hotel_id, h.name, h.city, COUNT(DISTINCT res.room_id) AS booked_rooms_count
+FROM hotels h
+LEFT JOIN rooms r ON r.hotel_id = h.hotel_id
+LEFT JOIN reservations res ON res.room_id = r.room_id AND res.status = 'booked'
+GROUP BY h.hotel_id, h.name, h.city;
+
+-- Q4: Find guests staying in the most expensive hotel.
+-- Define "most expensive hotel" by highest average room price.
+SELECT DISTINCT g.guest_id, g.first_name, g.last_name, g.email, h.hotel_id, h.name AS hotel_name
+FROM guests g
+JOIN reservations res ON res.guest_id = g.guest_id
+JOIN rooms r ON r.room_id = res.room_id
+JOIN hotels h ON h.hotel_id = r.hotel_id
+WHERE h.hotel_id = (
+  SELECT hotel_id
+  FROM rooms
+  GROUP BY hotel_id
+  ORDER BY AVG(price) DESC
+  LIMIT 1
+) AND res.status = 'booked';
+
+-- Q5: List all available rooms in "Goa."
+-- Here "available" means there is no active 'booked' reservation for that room.
+SELECT r.room_id, r.room_number, r.type, r.price, h.name AS hotel_name
+FROM rooms r
+JOIN hotels h ON r.hotel_id = h.hotel_id
+WHERE h.city = 'Goa'
+  AND r.room_id NOT IN (
+    SELECT room_id FROM reservations WHERE status = 'booked'
+  );
+
+
+
+Detailed explanation — line by line (clear, simple)
+Database creation & USE
+CREATE DATABASE IF NOT EXISTS hotel_reservation;
+Creates a database named hotel_reservation if it doesn't already exist.
+USE hotel_reservation;
+Tells MySQL to run subsequent statements against this database.
+________________________________________
+Table: hotels
+CREATE TABLE hotels (...);
+Defines a table to store hotel information.
+•	hotel_id INT AUTO_INCREMENT PRIMARY KEY, — unique ID per hotel, auto increments.
+•	name VARCHAR(100) NOT NULL, — hotel name, required.
+•	city VARCHAR(50) NOT NULL, — city where hotel is located.
+•	address VARCHAR(200) — optional address field.
+________________________________________
+Table: rooms
+CREATE TABLE rooms (...);
+Stores room records and links each room to a hotel.
+•	room_id INT AUTO_INCREMENT PRIMARY KEY, — unique room id.
+•	hotel_id INT NOT NULL, — foreign key referencing hotels.hotel_id.
+•	room_number VARCHAR(20) NOT NULL, — a label or number for the room.
+•	type VARCHAR(50), — room type (Single/Double/Suite).
+•	price DECIMAL(10,2) NOT NULL, — nightly price; decimal for money.
+•	FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id) — enforces link to hotels.
+________________________________________
+Table: guests
+CREATE TABLE guests (...);
+Holds guest personal details.
+•	guest_id INT AUTO_INCREMENT PRIMARY KEY, — unique id for guest.
+•	first_name, last_name, email — straightforward personal fields.
+________________________________________
+Table: reservations
+CREATE TABLE reservations (...);
+Tracks bookings.
+•	reservation_id INT AUTO_INCREMENT PRIMARY KEY — unique reservation id.
+•	room_id INT NOT NULL, guest_id INT NOT NULL — link to room and guest.
+•	check_in DATE NOT NULL, check_out DATE NOT NULL — booking dates.
+•	status ENUM('booked','cancelled','completed') DEFAULT 'booked' — booking state.
+•	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP — when reservation was created.
+•	FOREIGN KEY constraints maintain referential integrity.
+________________________________________
+Sample data (INSERT INTO ... VALUES ...)
+The INSERT statements add simple sample hotels, rooms (with prices), guests and reservations.
+The reservation rows use status to show different states (booked = active booking). Dates chosen are examples and you can change them as needed.
+________________________________________
+Queries
+Q1 — Hotels with more than 3 rooms booked
+SELECT h.hotel_id, h.name, h.city, COUNT(DISTINCT r.room_id) AS rooms_booked
+FROM hotels h
+JOIN rooms r ON r.hotel_id = h.hotel_id
+JOIN reservations res ON res.room_id = r.room_id
+WHERE res.status = 'booked'
+GROUP BY h.hotel_id, h.name, h.city
+HAVING COUNT(DISTINCT r.room_id) > 3;
+Explanation:
+•	Join hotels → rooms → reservations to link hotels and booked rooms.
+•	WHERE res.status = 'booked' restricts to current/active bookings.
+•	GROUP BY hotel and COUNT(DISTINCT r.room_id) counts unique booked rooms per hotel.
+•	HAVING ... > 3 filters hotels that have more than 3 distinct rooms currently booked.
+Q2 — Rooms by price descending
+SELECT r.room_id, r.room_number, r.type, r.price, h.name AS hotel_name, h.city
+FROM rooms r
+JOIN hotels h ON r.hotel_id = h.hotel_id
+ORDER BY r.price DESC;
+Explanation:
+•	Select room fields and hotel name, order by price highest first.
+•	Simple, useful to find most expensive rooms.
+Q3 — Number of rooms booked per hotel
+SELECT h.hotel_id, h.name, h.city, COUNT(DISTINCT res.room_id) AS booked_rooms_count
+FROM hotels h
+LEFT JOIN rooms r ON r.hotel_id = h.hotel_id
+LEFT JOIN reservations res ON res.room_id = r.room_id AND res.status = 'booked'
+GROUP BY h.hotel_id, h.name, h.city;
+Explanation:
+•	LEFT JOIN ensures hotels with zero bookings still appear (count = 0).
+•	COUNT(DISTINCT res.room_id) counts unique rooms that have a booked reservation.
+•	Result shows hotel and how many of its rooms are currently booked.
+Q4 — Guests staying in the most expensive hotel
+SELECT DISTINCT g.guest_id, g.first_name, g.last_name, g.email, h.hotel_id, h.name AS hotel_name
+FROM guests g
+JOIN reservations res ON res.guest_id = g.guest_id
+JOIN rooms r ON r.room_id = res.room_id
+JOIN hotels h ON h.hotel_id = r.hotel_id
+WHERE h.hotel_id = (
+  SELECT hotel_id
+  FROM rooms
+  GROUP BY hotel_id
+  ORDER BY AVG(price) DESC
+  LIMIT 1
+) AND res.status = 'booked';
+Explanation:
+•	First the subquery finds the hotel with the highest average room price: ORDER BY AVG(price) DESC LIMIT 1. That defines our "most expensive hotel".
+•	Then we join guests → reservations → rooms → hotels and filter to that hotel_id.
+•	res.status = 'booked' ensures we list guests who currently have bookings there.
+•	DISTINCT avoids duplicates if a guest has multiple reservations in same hotel.
+(You could define "most expensive" differently — e.g., hotel with the single most expensive room — but using average price is a common, fair definition. If you prefer max room price, replace ORDER BY AVG(price) with ORDER BY MAX(price).)
+Q5 — Available rooms in "Goa"
+SELECT r.room_id, r.room_number, r.type, r.price, h.name AS hotel_name
+FROM rooms r
+JOIN hotels h ON r.hotel_id = h.hotel_id
+WHERE h.city = 'Goa'
+  AND r.room_id NOT IN (
+    SELECT room_id FROM reservations WHERE status = 'booked'
+  );
+Explanation:
+•	Select rooms whose hotel city = 'Goa'.
+•	NOT IN (SELECT room_id FROM reservations WHERE status = 'booked') excludes any room that currently has a booked reservation.
+•	The result are rooms in Goa with no active booking (i.e., available).
+________________________________________
+Notes & tips
+•	Date logic: this simple script treats any reservation with status 'booked' as active. If you want to consider date ranges (e.g., a room may be booked for a future date but free today), you can refine the WHERE conditions to check check_in/check_out against a date (e.g., WHERE check_in <= CURDATE() AND check_out > CURDATE()).
+•	Indexes: for larger datasets you should add indexes on reservations(room_id), rooms(hotel_id) and reservations(guest_id) — but for small demo data it's fine without extra indexes.
+•	MySQL version: script uses standard features; CTEs were not required. The ENUM and subquery are supported on typical MySQL 5.7+ and 8.0.
+

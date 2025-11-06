@@ -1,0 +1,288 @@
+3.Design and develop SQL DDL and DML statements to manage the Student database (students, courses, and enrollments with grades).
+Also execute queries for following:
+1.Find average grade (convert A=4, B=3, etc.) per course.
+2.List students alphabetically by name.
+3.Find students enrolled in the course “Database Systems”.
+4.Delete a course if no students are enrolled.
+Display all students who scored grade 'A'.
+
+
+
+
+-- 0. Create and use database
+CREATE DATABASE IF NOT EXISTS student_db;
+USE student_db;
+
+-- Optional: drop tables if they already exist (clean rerun)
+DROP TABLE IF EXISTS Enrollments;
+DROP TABLE IF EXISTS Students;
+DROP TABLE IF EXISTS Courses;
+
+-- 1. Create tables (DDL)
+CREATE TABLE Students (
+    student_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150),
+    birth_year INT
+) ENGINE=InnoDB;
+
+CREATE TABLE Courses (
+    course_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_name VARCHAR(150) NOT NULL,
+    credits INT DEFAULT 3
+) ENGINE=InnoDB;
+
+CREATE TABLE Enrollments (
+    enrollment_id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    grade CHAR(1), -- A, B, C, D, F
+    FOREIGN KEY (student_id) REFERENCES Students(student_id),
+    FOREIGN KEY (course_id) REFERENCES Courses(course_id)
+) ENGINE=InnoDB;
+
+-- 2. Insert sample data (DML)
+
+-- Students
+INSERT INTO Students (name, email, birth_year) VALUES
+('Aisha Khan', 'aisha.khan@example.com', 2001),
+('Rohan Mehta', 'rohan.mehta@example.com', 2000),
+('Deepa Nair', 'deepa.nair@example.com', 1999),
+('Vikram Patel', 'vikram.patel@example.com', 2002),
+('Sara Iqbal', 'sara.iqbal@example.com', 1998);
+
+-- Courses
+INSERT INTO Courses (course_name, credits) VALUES
+('Database Systems', 4),
+('Operating Systems', 3),
+('Algorithms', 4),
+('Computer Networks', 3);
+
+-- Enrollments (student_id, course_id, grade)
+INSERT INTO Enrollments (student_id, course_id, grade) VALUES
+(1, 1, 'A'), -- Aisha -> Database Systems
+(1, 2, 'B'),
+(2, 1, 'B'), -- Rohan -> Database Systems
+(2, 3, 'A'),
+(3, 1, 'C'), -- Deepa -> Database Systems
+(3, 4, 'B'),
+(4, 2, 'A'),
+(4, 3, 'B'),
+(5, 4, 'A'); -- Sara -> Computer Networks
+
+-- 3. Queries required
+
+-- 1) Find average grade per course (A=4, B=3, C=2, D=1, F=0)
+SELECT
+    c.course_id,
+    c.course_name,
+    ROUND(AVG(
+        CASE UPPER(e.grade)
+            WHEN 'A' THEN 4
+            WHEN 'B' THEN 3
+            WHEN 'C' THEN 2
+            WHEN 'D' THEN 1
+            WHEN 'F' THEN 0
+            ELSE NULL
+        END
+    ), 2) AS avg_grade_points
+FROM
+    Courses c
+LEFT JOIN
+    Enrollments e ON c.course_id = e.course_id
+GROUP BY
+    c.course_id, c.course_name;
+
+-- 2) List students alphabetically by name
+SELECT student_id, name, email, birth_year
+FROM Students
+ORDER BY name ASC;
+
+-- 3) Find students enrolled in the course "Database Systems"
+SELECT
+    s.student_id,
+    s.name,
+    s.email,
+    e.grade
+FROM
+    Students s
+JOIN
+    Enrollments e ON s.student_id = e.student_id
+JOIN
+    Courses c ON e.course_id = c.course_id
+WHERE
+    c.course_name = 'Database Systems';
+
+-- 4) Delete a course if no students are enrolled
+-- This deletes courses that have zero enrollments.
+DELETE c
+FROM Courses c
+LEFT JOIN Enrollments e ON c.course_id = e.course_id
+WHERE e.course_id IS NULL;
+
+-- 5) Display all students who scored grade 'A'
+SELECT DISTINCT
+    s.student_id,
+    s.name,
+    s.email,
+    e.course_id,
+    (SELECT course_name FROM Courses WHERE course_id = e.course_id) AS course_name
+FROM
+    Students s
+JOIN
+    Enrollments e ON s.student_id = e.student_id
+WHERE
+    UPPER(e.grade) = 'A';
+
+
+
+
+
+Detailed explanation — line by line
+I’ll walk through each block and important line, explaining what it does and why it’s there.
+Database creation and selection
+CREATE DATABASE IF NOT EXISTS student_db;
+•	Creates a new database named student_db if it does not already exist. This is a container for your tables.
+USE student_db;
+•	Makes student_db the active database so the following statements create objects inside it.
+Clean start (optional)
+DROP TABLE IF EXISTS Enrollments;
+DROP TABLE IF EXISTS Students;
+DROP TABLE IF EXISTS Courses;
+•	Removes existing tables if present. The drop order removes dependent tables (Enrollments) first so foreign key constraints do not block the drops. IF EXISTS avoids an error if a table is missing.
+Create Students table
+CREATE TABLE Students (
+    student_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150),
+    birth_year INT
+) ENGINE=InnoDB;
+•	CREATE TABLE Students: define a table to hold student records.
+•	student_id INT AUTO_INCREMENT PRIMARY KEY: integer id that auto-increments and uniquely identifies each student.
+•	name VARCHAR(100) NOT NULL: student's full name; NOT NULL forces a value.
+•	email VARCHAR(150): contact email (optional).
+•	birth_year INT: year of birth (simple way to derive age if needed).
+•	ENGINE=InnoDB: uses InnoDB engine which supports transactions and foreign keys.
+Create Courses table
+CREATE TABLE Courses (
+    course_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_name VARCHAR(150) NOT NULL,
+    credits INT DEFAULT 3
+) ENGINE=InnoDB;
+•	Holds course metadata.
+•	credits defaults to 3 if not specified.
+Create Enrollments table (relationship with grades)
+CREATE TABLE Enrollments (
+    enrollment_id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    grade CHAR(1), -- A, B, C, D, F
+    FOREIGN KEY (student_id) REFERENCES Students(student_id),
+    FOREIGN KEY (course_id) REFERENCES Courses(course_id)
+) ENGINE=InnoDB;
+•	Enrollments is a junction table linking students and courses.
+•	grade CHAR(1) stores single-letter grades.
+•	Foreign keys ensure student_id and course_id refer to existing rows in Students and Courses. This enforces referential integrity.
+Insert sample students
+INSERT INTO Students (name, email, birth_year) VALUES
+('Aisha Khan', 'aisha.khan@example.com', 2001),
+...
+('Sara Iqbal', 'sara.iqbal@example.com', 1998);
+•	Adds sample student records. student_id is not provided — it auto-generates.
+Insert sample courses
+INSERT INTO Courses (course_name, credits) VALUES
+('Database Systems', 4),
+...
+('Computer Networks', 3);
+•	Adds a few course records, including the required "Database Systems".
+Insert sample enrollments (with grades)
+INSERT INTO Enrollments (student_id, course_id, grade) VALUES
+(1, 1, 'A'),
+...
+(5, 4, 'A');
+•	Links students to courses and assigns grades. IDs reference the auto-increment values created above (the sample assumes sequential IDs; that is fine when running the script from scratch).
+________________________________________
+Query 1 — Average grade per course (A=4, B=3, ...)
+SELECT
+    c.course_id,
+    c.course_name,
+    ROUND(AVG(
+        CASE UPPER(e.grade)
+            WHEN 'A' THEN 4
+            WHEN 'B' THEN 3
+            WHEN 'C' THEN 2
+            WHEN 'D' THEN 1
+            WHEN 'F' THEN 0
+            ELSE NULL
+        END
+    ), 2) AS avg_grade_points
+FROM
+    Courses c
+LEFT JOIN
+    Enrollments e ON c.course_id = e.course_id
+GROUP BY
+    c.course_id, c.course_name;
+•	CASE UPPER(e.grade) ... END — maps letter grades to numeric grade points (A→4, B→3, etc.). UPPER() ensures 'a' and 'A' are both handled.
+•	AVG(...) computes the average of those numeric values for each course.
+•	ROUND(..., 2) rounds the average to two decimal places.
+•	LEFT JOIN ensures courses with no enrollments still appear (their avg_grade_points will be NULL).
+•	GROUP BY groups results by course so the average is per course.
+Result: For every course you get its average grade points (GPA-like).
+________________________________________
+Query 2 — List students alphabetically
+SELECT student_id, name, email, birth_year
+FROM Students
+ORDER BY name ASC;
+•	Simple select of students, sorted by name in ascending order (A → Z).
+•	ASC is optional because ascending is default.
+________________________________________
+Query 3 — Students enrolled in "Database Systems"
+SELECT
+    s.student_id,
+    s.name,
+    s.email,
+    e.grade
+FROM
+    Students s
+JOIN
+    Enrollments e ON s.student_id = e.student_id
+JOIN
+    Courses c ON e.course_id = c.course_id
+WHERE
+    c.course_name = 'Database Systems';
+•	Joins Students → Enrollments → Courses.
+•	Filters rows where course_name equals 'Database Systems'.
+•	Returns student info and their grade in that course.
+________________________________________
+Query 4 — Delete a course if no students are enrolled
+DELETE c
+FROM Courses c
+LEFT JOIN Enrollments e ON c.course_id = e.course_id
+WHERE e.course_id IS NULL;
+•	This DELETE removes rows from Courses that have no matching row in Enrollments.
+•	LEFT JOIN pairs each course with enrollments if any; e.course_id IS NULL finds courses with zero enrollments.
+•	Using DELETE c FROM Courses c LEFT JOIN ... is a MySQL pattern to delete from one table while referencing joins.
+Caution: Deleting a course is irreversible. You may prefer SELECT first to preview which courses would be removed:
+SELECT c.course_id, c.course_name
+FROM Courses c
+LEFT JOIN Enrollments e ON c.course_id = e.course_id
+WHERE e.course_id IS NULL;
+________________________________________
+Query 5 — Display all students who scored grade 'A'
+SELECT DISTINCT
+    s.student_id,
+    s.name,
+    s.email,
+    e.course_id,
+    (SELECT course_name FROM Courses WHERE course_id = e.course_id) AS course_name
+FROM
+    Students s
+JOIN
+    Enrollments e ON s.student_id = e.student_id
+WHERE
+    UPPER(e.grade) = 'A';
+•	JOIN selects students who have enrollment records.
+•	WHERE UPPER(e.grade) = 'A' filters to only grade 'A' (case-insensitive).
+•	DISTINCT ensures a student appears only once per (student_id, course) combination; you can remove DISTINCT if you care to list multiple A's per student separately.
+•	The subquery (SELECT course_name ...) fetches the course name for display; alternatively you can JOIN Courses as in earlier queries.
+________________________________________

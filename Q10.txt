@@ -1,0 +1,224 @@
+10.Create a PL/SQL block that updates the balance of an account after a deposit and displays how many rows were updated using the implicit cursor attributes
+
+
+-- 1) Setup: create database and table
+CREATE DATABASE IF NOT EXISTS bank_db;
+USE bank_db;
+
+DROP TABLE IF EXISTS accounts;
+DROP PROCEDURE IF EXISTS deposit_to_account;
+
+CREATE TABLE accounts (
+  account_id INT AUTO_INCREMENT PRIMARY KEY,
+  holder_name VARCHAR(100) NOT NULL,
+  balance DECIMAL(12,2) NOT NULL DEFAULT 0.00
+);
+
+-- Insert sample accounts
+INSERT INTO accounts (holder_name, balance) VALUES
+('Asha Kumar', 1000.00),
+('Rohit Patel', 2500.50),
+('Leena Shah', 0.00);
+
+-- 2) Create stored procedure to perform deposit and report rows updated
+DELIMITER //
+
+CREATE PROCEDURE deposit_to_account(
+  IN p_acc_id INT,
+  IN p_amount DECIMAL(12,2)
+)
+BEGIN
+  -- local variables
+  DECLARE v_old_balance DECIMAL(12,2);
+  DECLARE v_new_balance DECIMAL(12,2);
+  DECLARE v_rows_updated INT DEFAULT 0;
+
+  -- handler: if SELECT ... INTO finds no row, set v_old_balance NULL (prevents an error)
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_old_balance = NULL;
+
+  -- Validate input amount
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    SELECT 'Invalid deposit amount. Amount must be greater than 0.' AS message;
+    RETURN;
+  END IF;
+
+  -- Start transaction to ensure atomic update and consistent read
+  START TRANSACTION;
+
+  -- Read the current balance for the account; FOR UPDATE would be used in InnoDB locks but SELECT ... FOR UPDATE requires a SELECT from a table in same transaction.
+  SELECT balance INTO v_old_balance FROM accounts WHERE account_id = p_acc_id FOR UPDATE;
+
+  -- If account not found, rollback and inform caller
+  IF v_old_balance IS NULL THEN
+    ROLLBACK;
+    SELECT CONCAT('Account ', p_acc_id, ' not found.') AS message;
+    RETURN;
+  END IF;
+
+  -- Perform the deposit (update balance)
+  UPDATE accounts
+    SET balance = balance + p_amount
+    WHERE account_id = p_acc_id;
+
+  -- Get number of rows affected by the UPDATE (MySQL equivalent to Oracle's SQL%ROWCOUNT)
+  SET v_rows_updated = ROW_COUNT();
+
+  -- Compute new balance for display
+  SET v_new_balance = v_old_balance + p_amount;
+
+  -- Commit the transaction
+  COMMIT;
+
+  -- Return informative result
+  SELECT p_acc_id AS account_id,
+         v_old_balance AS old_balance,
+         v_new_balance AS new_balance,
+         v_rows_updated AS rows_updated;
+END;
+//
+
+DELIMITER ;
+
+-- 3) Examples: call the procedure with different inputs
+
+-- a) valid deposit
+CALL deposit_to_account(1, 500.00);
+
+-- b) invalid deposit (negative amount)
+CALL deposit_to_account(2, -100.00);
+
+-- c) non-existent account
+CALL deposit_to_account(99, 50.00);
+
+-- 4) Show final account balances to verify
+SELECT * FROM accounts ORDER BY account_id;
+
+
+
+Line-by-line explanation & concepts
+I’ll walk through the important parts of the script and explain the concepts used.
+Setup: database and table
+CREATE DATABASE IF NOT EXISTS bank_db;
+USE bank_db;
+•	Creates bank_db if missing and switches the session to it.
+DROP TABLE IF EXISTS accounts;
+DROP PROCEDURE IF EXISTS deposit_to_account;
+•	Clean start: remove any previous table/procedure so the script is safe to re-run.
+CREATE TABLE accounts (
+  account_id INT AUTO_INCREMENT PRIMARY KEY,
+  holder_name VARCHAR(100) NOT NULL,
+  balance DECIMAL(12,2) NOT NULL DEFAULT 0.00
+);
+•	Creates accounts table.
+o	account_id is a unique identifier auto-incremented.
+o	balance uses DECIMAL(12,2) for currency precision.
+Concepts: relational table, data types, primary key, auto-increment, monetary precision.
+Insert sample data
+INSERT INTO accounts (holder_name, balance) VALUES (...);
+•	Adds three sample accounts to test the procedure.
+Concept: DML — inserting rows.
+Procedure creation: delimiter
+DELIMITER //
+•	Temporarily change statement delimiter so MySQL doesn't treat semicolons inside the procedure as statement terminators.
+Procedure header and variable declarations
+CREATE PROCEDURE deposit_to_account(IN p_acc_id INT, IN p_amount DECIMAL(12,2))
+BEGIN
+  DECLARE v_old_balance DECIMAL(12,2);
+  DECLARE v_new_balance DECIMAL(12,2);
+  DECLARE v_rows_updated INT DEFAULT 0;
+•	Defines a stored procedure that accepts two input parameters:
+o	p_acc_id — the account id to deposit into.
+o	p_amount — deposit amount.
+•	Local variables hold old/new balances and rows updated.
+Concepts: stored procedures, input parameters, local variables.
+Handler for SELECT ... INTO not found
+DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_old_balance = NULL;
+•	If a SELECT ... INTO finds no rows, MySQL raises NOT FOUND. The handler sets v_old_balance to NULL and continues instead of letting the procedure error out. This allows us to check for a missing account gracefully.
+Concepts: exception/condition handler, graceful error handling.
+Validate deposit amount
+IF p_amount IS NULL OR p_amount <= 0 THEN
+  SELECT 'Invalid deposit amount. Amount must be greater than 0.' AS message;
+  RETURN;
+END IF;
+•	Rejects zero or negative deposits early and returns a helpful message.
+Concept: input validation.
+Transaction and SELECT ... FOR UPDATE
+START TRANSACTION;
+SELECT balance INTO v_old_balance FROM accounts WHERE account_id = p_acc_id FOR UPDATE;
+•	START TRANSACTION ensures the read and update happen atomically.
+•	SELECT ... FOR UPDATE locks the selected row in InnoDB so concurrent transactions cannot change it until this transaction commits or rolls back. It also retrieves the current balance into v_old_balance.
+Concepts: transactions, row locking, consistent reads.
+Account-not-found handling
+IF v_old_balance IS NULL THEN
+  ROLLBACK;
+  SELECT CONCAT('Account ', p_acc_id, ' not found.') AS message;
+  RETURN;
+END IF;
+•	If the account doesn’t exist, roll back the transaction (no change), inform caller and return.
+Concept: safe failure handling inside transactions.
+Perform the update
+UPDATE accounts
+  SET balance = balance + p_amount
+  WHERE account_id = p_acc_id;
+•	Adds the deposit amount to the stored balance.
+Concept: UPDATE statement.
+Get number of rows updated
+SET v_rows_updated = ROW_COUNT();
+•	ROW_COUNT() returns the number of rows affected by the most recent INSERT, UPDATE, or DELETE. This is MySQL’s way of giving you the number of rows modified — analogous to Oracle’s SQL%ROWCOUNT. We store it in v_rows_updated for reporting.
+Concept: implicit cursor attribute equivalent — ROW_COUNT().
+Compute and commit
+SET v_new_balance = v_old_balance + p_amount;
+COMMIT;
+•	Compute the new balance for display and commit the transaction so the update becomes permanent.
+Concepts: compute derived values, commit transaction.
+Return informative result
+SELECT p_acc_id AS account_id,
+       v_old_balance AS old_balance,
+       v_new_balance AS new_balance,
+       v_rows_updated AS rows_updated;
+•	Returns a single-row result set showing the account id, old balance, new balance, and how many rows were updated (should be 1 on success).
+Concepts: returning status/result to caller.
+End procedure & restore delimiter
+END;
+//
+DELIMITER ;
+•	Ends procedure and restores default delimiter.
+Example calls
+CALL deposit_to_account(1, 500.00);
+CALL deposit_to_account(2, -100.00);
+CALL deposit_to_account(99, 50.00);
+•	Demonstrates:
+o	Valid deposit (should update account 1 and show rows_updated = 1).
+o	Invalid deposit amount (negative) — procedure returns an error message, no change.
+o	Non-existent account — procedure returns "Account 99 not found." and no change.
+Final verification
+SELECT * FROM accounts ORDER BY account_id;
+•	Shows the final table state so you can verify balances after the calls.
+________________________________________
+Notes & mapping to Oracle PL/SQL concepts
+•	Oracle PL/SQL has implicit cursor attributes such as SQL%ROWCOUNT to get the number of rows affected by the last DML. MySQL does not have SQL%ROWCOUNT, but the equivalent is ROW_COUNT() — the function we used to capture v_rows_updated.
+•	SELECT ... INTO var in MySQL can raise a NOT FOUND. We handle it with DECLARE CONTINUE HANDLER FOR NOT FOUND.
+•	We used transactions (START TRANSACTION / COMMIT / ROLLBACK) to ensure the deposit update is atomic and consistent under concurrent access.
+•	SELECT ... FOR UPDATE locks the row so concurrent deposits won’t cause lost updates.
+________________________________________
+Expected outputs (examples)
+1.	CALL deposit_to_account(1, 500.00); should return something like:
++------------+-------------+-------------+--------------+
+| account_id | old_balance | new_balance | rows_updated |
++------------+-------------+-------------+--------------+
+|          1 |     1000.00 |     1500.00 |            1 |
++------------+-------------+-------------+--------------+
+2.	CALL deposit_to_account(2, -100.00); will return:
++---------------------------------------------+
+| message                                     |
++---------------------------------------------+
+| Invalid deposit amount. Amount must be > 0. |
++---------------------------------------------+
+3.	CALL deposit_to_account(99, 50.00); will return:
++---------------------------+
+| message                   |
++---------------------------+
+| Account 99 not found.     |
++---------------------------+
+Finally SELECT * FROM accounts; will show the updated balances (account 1 will have +500).
+
